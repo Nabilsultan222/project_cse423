@@ -1,206 +1,202 @@
-# Import necessary libraries
-import random  # For random number generation
-import math  # For mathematical calculations
-from OpenGL.GL import *  # OpenGL functions for rendering
-from OpenGL.GLUT import *  # GLUT functions for window and input handling
-from OpenGL.GLU import *  # GLU functions for higher-level utilities
-from OpenGL.GLUT import GLUT_BITMAP_HELVETICA_18  # Font for rendering text
+import random
+import math
+from OpenGL.GL import *
+from OpenGL.GLUT import *
+from OpenGL.GLU import *
+from OpenGL.GLUT import GLUT_BITMAP_HELVETICA_18
+cheat_mode=False
+# Teapot initial state
+teapot = None 
+teapot_rotation = 0.0  
+teapot_invincibility = False 
+teapot_timer = 0.0  
+teapot_respawn_timer = 0.0  
 
-# Global variables for game state and settings
-cheat_mode = False  # Cheat mode toggle
-teapot = None  # Stores the teapot's position and state
-teapot_rotation = 0.0  # Rotation angle for the teapot
-teapot_invincibility = False  # Whether the player is invincible
-teapot_timer = 0.0  # Timer to track invincibility duration
-teapot_respawn_timer = 0.0  # Teapot respawn timer
+active_bullets = []  
+bullet_speed = 0.4   
+bullet_size = 0.1
+bullets = 5    
+initial_zpos=2.0
+distanceCovered=0.0
+movementSpeed=0.0005
+speed_increment=0.00009
+max_speed= 0.15
+coins= []
+coinCount= 0
+trees = []
+tree_spacing = 8.5  
+max_tree_distance = 50.0  
+debris = []
+debris_spawn_distance = 30.0
+debris_spacing = 3.0
+game_over = False
+camera_mode = "third" 
+score=0
 
-# Bullet-related variables
-active_bullets = []  # List to store active bullets
-bullet_speed = 0.4  # Speed of bullets
-bullet_size = 0.1  # Size of bullets
-bullets = 5  # Initial bullet count
+width, height = 800, 600
 
-# Player and game state variables
-initial_zpos = 2.0  # Initial z-position of the player
-distanceCovered = 0.0  # Distance covered by the player
-movementSpeed = 0.001  # Initial movement speed of the player
-speed_increment = 0.00007  # Speed increment per frame
-max_speed = 0.22  # Maximum movement speed
-coins = []  # List to store coins
-coinCount = 0  # Number of coins collected
-trees = []  # List to store tree positions
-tree_spacing = 8.5  # Spacing between trees
-max_tree_distance = 50.0  # Maximum distance for trees
-debris = []  # List to store debris
-debris_spawn_distance = 30.0  # Distance to spawn debris
-debris_spacing = 3.0  # Spacing between debris
-game_over = False  # Game over state
-camera_mode = "third"  # Camera mode (third-person or first-person)
-score = 0  # Player's score
+player_x, player_z = 0.0, 2.0
+player_size = 0.2
+move_speed = 0.2
+#road
+road_segment_length = 4.0
+road_width = 5.3
+num_segments = 10
+visible_range = 60.0
+#road and vehicle
+segments = []
+vehicles = []
+vehicle_size = 0.4
+vehicle_speed = 2
 
-# Window dimensions
-width, height = 800, 600  # Width and height of the window
 
-# Player dimensions and position
-player_x, player_z = 0.0, 2.0  # Initial x and z positions of the player
-player_size = 0.2  # Size of the player
-move_speed = 0.2  # Speed of player movement
-
-# Road parameters
-road_segment_length = 4.0  # Length of each road segment
-road_width = 5.3  # Width of the road
-num_segments = 10  # Number of road segments
-visible_range = 60.0  # Visible range of the road
-
-# Road and vehicle data
-segments = []  # List to store road segments
-vehicles = []  # List to store vehicles
-
-# Vehicle parameters
-vehicle_size = 0.4  # Size of vehicles
-vehicle_speed = 2  # Speed of vehicles
-
-# Initialize OpenGL settings and road segments
 def init():
-    glClearColor(0.1, 0.1, 0.2, 1.0)  # Set background color (dark blue)
-    glEnable(GL_DEPTH_TEST)  # Enable depth testing for 3D rendering
-    glMatrixMode(GL_PROJECTION)  # Set projection matrix mode
-    glLoadIdentity()  # Reset the projection matrix
-    gluPerspective(45, width / height, 0.4, 100)  # Set perspective projection
-    glMatrixMode(GL_MODELVIEW)  # Set model-view matrix mode
+    glClearColor(0.1, 0.1, 0.2, 1.0)
+    glEnable(GL_DEPTH_TEST)
+    glMatrixMode(GL_PROJECTION)
+    glLoadIdentity()
+    gluPerspective(45, width / height, 0.4, 100)
+    glMatrixMode(GL_MODELVIEW)
 
-    # Initialize road segments
     for i in range(num_segments):
         segments.append({
-            "z_position": i * road_segment_length,  # Position of the segment
-            "active": True,  # Whether the segment is active
-            "vehicle_present": False,  # Whether a vehicle is present
-            "coin_present": False  # Whether a coin is present
-        })
+            "z_position": i * road_segment_length,
+            "active": True,
+            "vehicle_present": False,
+            "coin_present": False})
 
-# Function to spawn a vehicle
+
+
 def spawn_vehicle():
-    side = random.choice(["left", "right"])  # Randomly choose left or right side
+    side = random.choice(["left", "right"])
     eligible_segments = [s for s in segments if s["z_position"] > player_z and not s["vehicle_present"]]
     if not eligible_segments:
-        return  # Exit if no eligible segments
+        return
 
-    segment = random.choice(eligible_segments)  # Choose a random eligible segment
-    z_position = segment["z_position"]  # Get the z-position of the segment
-    segment["vehicle_present"] = True  # Mark the segment as having a vehicle
+    segment = random.choice(eligible_segments)
+    z_position = segment["z_position"]
+    segment["vehicle_present"] = True
 
-    # Set vehicle position and direction based on the side
     if side == "left":
         x_position = -road_width / 2 + vehicle_size / 2
+        
         direction = "right"
     else:
         x_position = road_width / 2 - vehicle_size / 2
+        
         direction = "left"
 
-    # Calculate vehicle speed based on score
-    base_speed = 0.005 + min(score * 0.0002, 0.015)
+    base_speed = 0.005 + min(score * 0.0002, 0.015)  
     speed = random.uniform(base_speed, base_speed + 0.005)
 
-    # Add the vehicle to the list
     vehicles.append({
         "x_position": x_position,
         "z_position": z_position,
         "direction": direction,
-        "speed": speed
-    })
+        "speed": speed})
 
-# Function to update the road and vehicles
 def update_road():
     global segments, vehicles, player_x, player_z, game_over
 
     if game_over:
-        return  # Exit if the game is over
+        return 
 
-    # Remove road segments that are too far behind
+    #remove road segments that are far behind
     if segments[0]["z_position"] + road_segment_length < player_z - visible_range:
         segments.pop(0)
 
-    # Add new road segments ahead
+    #add new road ahead
     if segments[-1]["z_position"] < player_z + visible_range:
         segments.append({
             "z_position": segments[-1]["z_position"] + road_segment_length,
             "active": True,
             "vehicle_present": False,
-            "coin_present": False
-        })
+            "coin_present": False})
 
-    # Spawn vehicles randomly based on score
-    spawn_chance = min(0.02 + score * 0.0005, 0.1)
+    #vehicle spawning on spawnchance
+    spawn_chance = min(0.02 + score * 0.0005, 0.1)  
     if random.random() < spawn_chance:
+        if spawn_chance>0.1:
+            print("BRUHHHHHH")
         spawn_vehicle()
 
-    # Update vehicle positions
+    spawn_chance_coin = min(0.04 + score * 0.0005, 0.15)
+
+    #spawn coins on chance
+    if random.random() < spawn_chance_coin:
+        spawn_coin_batch()
+
+    #updating vehicle positions
     for vehicle in vehicles:
         if vehicle["direction"] == "left":
             vehicle["x_position"] -= vehicle["speed"]
         else:
             vehicle["x_position"] += vehicle["speed"]
 
-    # Remove vehicles that are out of bounds
+    #outofbounds remove
     vehicles = [v for v in vehicles if (-road_width / 2 - vehicle_size) <= v["x_position"] <= (road_width / 2 + vehicle_size)]
 
-    # Check for collision with the player
+    #Update segment vehicle flags
+    for segment in segments:
+        segment["vehicle_present"] = any(abs(v["z_position"] - segment["z_position"]) < 0.01 for v in vehicles)
+
+    #collision with the player
     for vehicle in vehicles:
         if not teapot_invincibility and \
            abs(vehicle["x_position"] - player_x) < (vehicle_size / 2 + player_size / 2) and \
            abs(vehicle["z_position"] - player_z) < (vehicle_size / 2 + player_size / 2):
             print("Game Over! The player was hit by a car.")
-            game_over = True  # Set game over state
-            return  # Exit the function
+            game_over = True  
+            return 
         
 def draw_starting():
     glPushMatrix()
-    glColor3f(48 / 255, 93 / 255, 75 / 255)  # Set the color for the starting area
-    glRotatef(-90, 1, 0, 0)  # Rotate the starting area to align with the road
-    glTranslatef(-3, 0, 0)  # Translate the starting area to the correct position
-    glBegin(GL_QUADS)  # Begin drawing a quadrilateral
-    glVertex3f(0, 200, 0)  # Define the first vertex
-    glVertex3f(0, 0, 0)  # Define the second vertex
-    glVertex3f(800, 0, 0)  # Define the third vertex
-    glVertex3f(200, 0, 0)  # Define the fourth vertex
-    glEnd()  # End drawing the quadrilateral
-    glPopMatrix()  # Restore the previous matrix state
+    glColor3f(48/255,93/255,75/255)
+    glRotatef(-90,1,0,0)
+    glTranslatef(-3,0,0)
+    glBegin(GL_QUADS)
+    glVertex3f(0,200,0)
+    glVertex3f(0,0,0)
+    glVertex3f(800,0,0)
+    glVertex3f(200,0,0)
+    glEnd()
+    glPopMatrix()
+
 
 def update_bullets():
     global active_bullets, vehicles
 
-    # Move bullets forward
+    #Move bullets forward
     for bullet in active_bullets:
         bullet["z_position"] += bullet_speed
 
-    # Check for collisions with vehicles
+    #Check for collisions with vehicles
     for bullet in active_bullets[:]:
         for vehicle in vehicles[:]:
-            collision_range = 0.2  # Define the collision range for vehicles
+            collision_range = 0.2 
 
-            # Check if the bullet collides with a vehicle
             if abs(bullet["x_position"] - vehicle["x_position"]) < (vehicle_size / 2 + collision_range) and \
                abs(bullet["z_position"] - vehicle["z_position"]) < (vehicle_size / 2 + collision_range):
-                vehicles.remove(vehicle)  # Remove the hit vehicle
-                active_bullets.remove(bullet)  # Remove the bullet
+                vehicles.remove(vehicle)  
+                active_bullets.remove(bullet)  
                 print("Shot a car!")
                 break
 
-    # Remove bullets that go out of bounds
+    #Remove bullets that go out of bounds
     active_bullets = [b for b in active_bullets if b["z_position"] < player_z + visible_range]
 
 def draw_road():
-    draw_starting()  # Draw the starting area
+    draw_starting()
     glPushMatrix()
     for segment in segments:
         is_road = int(segment["z_position"] / road_segment_length) % 2 == 0
 
         if is_road:
-            glColor3f(36 / 255, 33 / 255, 42 / 255)  # Set the road color
+            glColor3f(36/255,33/255,42/255)  
         else:
-            glColor3f(48 / 255, 93 / 255, 75 / 255)  # Set the grass color
+            glColor3f(48/255,93/255,75/255)  
 
-        # Draw road or grass
+        # drawing
         glBegin(GL_QUADS)
         glVertex3f(-road_width / 2, -0.05, segment["z_position"])
         glVertex3f(road_width / 2, -0.05, segment["z_position"])
@@ -208,15 +204,15 @@ def draw_road():
         glVertex3f(-road_width / 2, -0.05, segment["z_position"] + road_segment_length)
         glEnd()
 
-        # Draw dashed white road markings
+        #road marking
         if is_road:
-            glColor3f(1.0, 1.0, 1.0)  # Set the color for road markings
-            mark_width = 0.6  # Width of each marking
-            mark_thickness = 0.1  # Thickness of each marking
-            mark_gap = 0.7  # Gap between markings
+            glColor3f(1.0, 1.0, 1.0)  
+            mark_width = 0.6           
+            mark_thickness = 0.1       
+            mark_gap = 0.7             
 
-            start_x = -road_width / 2 + mark_gap  # Start a bit inside
-            end_x = road_width / 2 - mark_width - mark_gap  # End a bit inside
+            start_x = -road_width / 2 + mark_gap            
+            end_x = road_width / 2 - mark_width - mark_gap  
 
             x = start_x
             while x <= end_x:
@@ -227,79 +223,82 @@ def draw_road():
                 glVertex3f(x, -0.04, segment["z_position"] + road_segment_length / 2 + mark_thickness / 2)
                 glEnd()
 
-                x += mark_width + mark_gap  # Move to the next marking
+                x += mark_width + mark_gap
     glPopMatrix()
+
+
 
 def draw_player():
-    glPushMatrix()  # Save the current transformation matrix
-    glTranslatef(player_x, 0.0, player_z)  # Move to the player's position
-    glRotatef(-90, 1, 0, 0)  # Rotate the player to face forward
-    glColor3f(1.0, 1.0, 1.0)  # Set the player's body color to white
-    glutSolidCone(0.1, 0.4, 32, 32)  # Draw the player's body as a cone
-    glPopMatrix()  # Restore the previous transformation matrix
-
-    # Draw the player's head
     glPushMatrix()
-    glTranslatef(player_x, 0.4, player_z)  # Position the head above the body
-    glColor3f(1, 1, 1)  # Set the head color to white
-    glutSolidSphere(0.080, 32, 32)  # Draw the head as a sphere
+    glTranslatef(player_x, 0.0, player_z)
+    glRotatef(-90, 1, 0, 0)
+    glColor3f(1.0, 1.0, 1.0)
+    glutSolidCone(0.1,0.4,32,32)
     glPopMatrix()
 
-    # Draw the player's hat
+    #head
     glPushMatrix()
-    glTranslate(player_x, 0.40, player_z)  # Position the hat on top of the head
-    glRotatef(-90, 1, 0, 0)  # Rotate the hat to align with the head
-    glColor3f(200 / 255, 54 / 255, 67 / 255)  # Set the hat color to red
-    glutSolidCone(0.08, 0.25, 32, 32)  # Draw the hat as a cone
+    glTranslatef(player_x,0.4,player_z)
+    glColor3f(1,1,1)
+    glutSolidSphere(0.080,32,32)
     glPopMatrix()
 
+    #hat
+    glPushMatrix()
+    glTranslate(player_x,0.40,player_z)
+    glRotatef(-90, 1, 0, 0)
+    glColor3f(200/255,54/255,67/255)
+    glutSolidCone(0.08,0.25,32,32)
+    glPopMatrix()
 
 def draw_circle(x, y, z, radius, slices=30):
-    glBegin(GL_POLYGON)  # Begin drawing a filled circle
-    for i in range(slices):  # Divide the circle into slices for smoothness
-        angle = 2 * math.pi * i / slices  # Calculate the angle for each slice
-        glVertex3f(x + radius * math.cos(angle), y, z + radius * math.sin(angle))  # Calculate the vertex position
-    glEnd()  # End drawing the circle
+    glBegin(GL_POLYGON)
+    for i in range(slices):
+        angle = 2 * math.pi * i / slices
+        glVertex3f(x + radius * math.cos(angle), y, z + radius * math.sin(angle))
+    glEnd()
+
 
 def draw_wheel(x, y, z, radius, rotation_angle):
-    glPushMatrix()  # Save the current transformation matrix
-    glTranslatef(x, y, z)  # Move to the wheel's position
-    glColor3f(36 / 255, 75 / 255, 117 / 255)  # Set the wheel color
-    glRotatef(rotation_angle, 1, 0, 0)  # Rotate the wheel around the X-axis
-    draw_circle(0, 0, 0, radius)  # Draw the wheel as a circle
-    glPopMatrix()  # Restore the previous transformation matrix
+    glPushMatrix()
+    glTranslatef(x, y, z) 
+    glColor3f(36/255, 75/255, 117/255)
+    glRotatef(rotation_angle, 1, 0, 0)  
+    
+    draw_circle(0, 0, 0, radius)        
+    glPopMatrix()
+
 
 def draw_vehicles():
-    for vehicle in vehicles:  # Iterate through all vehicles
-        sf = 0.09  # Scale factor for the vehicle
-
-        # Draw the main body of the vehicle
+    for vehicle in vehicles:
+        sf=0.09
         glPushMatrix()
-        glTranslatef(vehicle["x_position"], 0.0, vehicle["z_position"])  # Move to the vehicle's position
-        glColor3f(189 / 255, 67 / 255, 54 / 255)  # Set the vehicle's body color
-        glScalef(2, 1.0, 0.79)  # Scale the vehicle's body
-        glutSolidCube(0.4)  # Draw the body as a cube
+        glTranslatef(vehicle["x_position"], 0.0, vehicle["z_position"])
+
+        #mainbody
+        glColor3f( 189/255,  67/255, 54/255)
+        glTranslatef(0.0,0,0.0)
+        glScalef(2,1.0,0.79)
+        glutSolidCube(0.4)
         glPopMatrix()
 
-        # Draw the upper part of the vehicle
+        #left part
         glPushMatrix()
-        glTranslatef(vehicle["x_position"], 0.0, vehicle["z_position"])  # Move to the vehicle's position
-        glColor3f(210 / 255, 209 / 255, 185 / 255)  # Set the upper part's color
-        glTranslatef(0, 0.34, 0)  # Move the upper part above the body
-        glScalef(1.5, 1.0, 0.79)  # Scale the upper part
-        glutSolidCube(0.25)  # Draw the upper part as a cube
+        glTranslatef(vehicle["x_position"], 0.0, vehicle["z_position"])
+        glColor3f(210/255, 209/255, 185/255)
+        glTranslatef(0,0.34,0)
+        glScalef(1.5,1.0,0.79)
+        glutSolidCube(0.25)
         glPopMatrix()
-
-        # Draw the wheels of the vehicle
-        wheel_radius = 0.1  # Radius of the wheels
-        wheel_offset = 0.2  # Offset of the wheels from the center
-        wheel_rotation = 90  # Rotation angle of the wheels
-
-        # Front left wheel
+        
+        wheel_radius = 0.1
+        wheel_offset = 0.2  
+        wheel_rotation = 90
         draw_wheel(vehicle["x_position"] - wheel_offset, 0.03, vehicle["z_position"] - 0.35, wheel_radius, wheel_rotation)
 
-        # Rear right wheel
+        #Rear right wheel
         draw_wheel(vehicle["x_position"] + wheel_offset, 0.03, vehicle["z_position"] - 0.35, wheel_radius, wheel_rotation)
+
 
 def draw_trees():
     for tree in trees:
@@ -443,6 +442,8 @@ def draw_mountain_range():
     for i in range(-100, 101, spacing): 
         if i >5 or i<-5:
             draw_mountain(i, 0.0, z_base ) 
+        
+
 
 def draw_bullets():
     global active_bullets
@@ -450,67 +451,66 @@ def draw_bullets():
     glColor3f(204/255, 0, 0.0)  
     for bullet in active_bullets:
         glPushMatrix()
-        glTranslatef(bullet["x_position"], 0.2, bullet["z_position"])  #Adjust height
+        glTranslatef(bullet["x_position"], 0.2, bullet["z_position"])  #Adjusting height
         glutSolidSphere(bullet_size, 16, 16) 
         glPopMatrix()
 
+
 def draw_debris():
-    for d in debris:  # Iterate through all debris objects
-        glPushMatrix()  # Save the current transformation matrix
-        glTranslatef(d["x"], 0.0, d["z"])  # Move to the debris's position
+    for d in debris:
+        glPushMatrix()
+        glTranslatef(d["x"], 0.0, d["z"])
 
-        # Check the type of debris and draw accordingly
         if d["type"] == "rock":
-            glColor3f(0.3, 0.3, 0.3)  # Set the color for rocks (gray)
-            glutSolidSphere(d["size"], 8, 8)  # Draw the rock as a sphere
+            glColor3f(0.3, 0.3, 0.3)
+            glutSolidSphere(d["size"], 8, 8)
         elif d["type"] == "bone":
-            glColor3f(102 / 255, 51 / 255, 0 / 255)  # Set the color for bones (brown)
-            glScalef(0.1, 0.1, 0.5)  # Scale the bone to make it elongated
-            glutSolidCube(d["size"] * 10)  # Draw the bone as a scaled cube
+            glColor3f(102/255,51/255,0/255)
+            glScalef(0.1, 0.1, 0.5)
+            glutSolidCube(d["size"] * 10)
 
-        glPopMatrix()  # Restore the previous transformation matrix
+        glPopMatrix()
+
+
 
 def update_debris():
     global debris
 
-    # Find the farthest z-position among existing debris
     farthest_z = max([d["z"] for d in debris], default=player_z)
-
-    # Generate new debris ahead of the player
     while farthest_z < player_z + debris_spawn_distance:
-        farthest_z += debris_spacing  # Increment the z-position for the next debris
+        farthest_z += debris_spacing
 
-        # Randomly choose the side (left or right) for the debris
+        #random left/right 
         side = random.choice([-1, 1])
-        x_pos = side * random.uniform(3.0, 15.0)  # Random x-position within a range
+        x_pos = side * random.uniform(3.0, 15.0)
 
-        # Add a new debris object to the list
         debris.append({
             "x": x_pos,
             "z": farthest_z,
-            "size": random.uniform(0.1, 0.9),  # Random size for the debris
-            "type": random.choice(["rock", "bone"])  # Randomly choose the type
-        })
+            "size": random.uniform(0.1, 0.9),
+            "type": random.choice(["rock", "bone"])})
 
-    # Remove debris that are too far behind the player
+    #removing debris from behind
     debris = [d for d in debris if d["z"] > player_z - 10.0]
+
+
 
 def fire_bullet():
     global bullets, active_bullets, game_over
 
     # Add a new bullet at the player's position
     active_bullets.append({
-        "x_position": player_x,  # Bullet starts at the player's x-position
-        "z_position": player_z + 0.5,  # Bullet starts slightly ahead of the player
-    })
+        "x_position": player_x,
+        "z_position": player_z + 0.5,})
 
-    bullets -= 1  # Reduce the bullet count by 1
-    print(f"Bullets left: {bullets}")  # Print the remaining bullet count
+    bullets -= 1 
+    print(f"Bullets left: {bullets}")
 
-    # Check if bullets are finished
+    
     if bullets == 0:
-        print("No bullets left!")  # Notify the player that no bullets are left
-
+        print("No bullets left!")
+          
+        
 def draw_distance():
     glMatrixMode(GL_PROJECTION)
     glPushMatrix()
@@ -521,22 +521,15 @@ def draw_distance():
     glPushMatrix()
     glLoadIdentity()
 
-    # # Display distance
-    # glColor3f(1.0, 1.0, 1.0)
-    # distance_text = f"Distance: {int(distanceCovered)}"
-    # glRasterPos2f(10, height - 30)
-    # for ch in distance_text:
-    #     glutBitmapCharacter(GLUT_BITMAP_HELVETICA_18, ord(ch))
-
-    # Display coins
-    glColor3f(1.0, 1.0, 0.0)  # Yellow color for coins
+    #coins
+    glColor3f(1.0, 1.0, 0.0)  
     coins_text = f"Coins: {coinCount}"
     glRasterPos2f(10, height - 25)
     for ch in coins_text:
         glutBitmapCharacter(GLUT_BITMAP_HELVETICA_18, ord(ch))
 
-    # Display bullets
-    glColor3f(0.0, 1.0, 0.0)  # Red color for bullets
+    #bullets
+    glColor3f(0.0, 1.0, 0.0) 
     bullets_text = f"Bullets: {bullets}"
     glRasterPos2f(10, height - 75)
     for ch in bullets_text:
@@ -552,14 +545,13 @@ def draw_score():
     glPushMatrix()
     glLoadIdentity()
     gluOrtho2D(0, width, 0, height)
-
     glMatrixMode(GL_MODELVIEW)
     glPushMatrix()
     glLoadIdentity()
-
     glColor3f(1.0, 1.0, 0.0)
     score_text = f"Score: {score}"
     glRasterPos2f(10, height - 50)
+
     for ch in score_text:
         glutBitmapCharacter(GLUT_BITMAP_HELVETICA_18, ord(ch))
 
@@ -572,13 +564,12 @@ def draw_game_over():
     glMatrixMode(GL_PROJECTION)
     glPushMatrix()
     glLoadIdentity()
-    gluOrtho2D(0, width, 0, height)  # Set up orthographic projection
+    gluOrtho2D(0, width, 0, height)  
 
     glMatrixMode(GL_MODELVIEW)
     glPushMatrix()
     glLoadIdentity()
 
-    # Black background
     glDisable(GL_DEPTH_TEST)
     glColor3f(0.0, 0.0, 0.0)
     glBegin(GL_QUADS)
@@ -588,94 +579,86 @@ def draw_game_over():
     glVertex2f(0, height)
     glEnd()
 
-    # "YOU DIED" - Red text
     glColor3f(1.0, 0.0, 0.0)
     glRasterPos2f(width // 2 - 50, height // 2 + 10)
+
     for c in "YOU DIED":
         glutBitmapCharacter(GLUT_BITMAP_HELVETICA_18, ord(c))
 
-    # "PRESS R TO RESTART" - White text
     glColor3f(1.0, 1.0, 1.0)
     glRasterPos2f(width // 2 - 90, height // 2 - 20)
+
     for c in "PRESS R TO RESTART":
         glutBitmapCharacter(GLUT_BITMAP_HELVETICA_18, ord(c))
 
     glEnable(GL_DEPTH_TEST)
-
     glMatrixMode(GL_PROJECTION)
     glPopMatrix()
     glMatrixMode(GL_MODELVIEW)
     glPopMatrix()
 
+
 def spawn_coin_batch():
     global coins
 
-    # Find eligible road segments for spawning coins
     eligible_segments = [
         s for s in segments
-        if int(s["z_position"] / road_segment_length) % 2 == 0  # Only spawn on road segments
-        and not s["coin_present"]  # Ensure no coins are already present
-        and not s["vehicle_present"]  # Ensure no vehicles are present
-        and s["z_position"] > player_z  # Ensure the segment is ahead of the player
-    ]
+        if int(s["z_position"] / road_segment_length) % 2 == 0
+        and not s["coin_present"]
+        and not s["vehicle_present"]
+        and s["z_position"] > player_z]
 
     if not eligible_segments:
-        return  # Exit if no eligible segments are found
+        return
 
-    # Choose a random eligible segment
     segment = random.choice(eligible_segments)
-    segment["coin_present"] = True  # Mark this segment as having coins
+    segment["coin_present"] = True  
 
-    # Determine the number of coins in the batch
-    batch_size = random.randint(2, 5)  # Randomly choose between 2 and 5 coins
-    gap = 0.5  # Gap between coins on the Z-axis
-    x_pos = random.uniform(-road_width / 2 + 0.5, road_width / 2 - 0.5)  # Random X-position within road boundaries
-    z_start = segment["z_position"] + road_segment_length / 2  # Start position for the coins
+    batch_size = random.randint(2, 5)
+    gap = 0.5  
+    x_pos = random.uniform(-road_width / 2 + 0.5, road_width / 2 - 0.5)
+    z_start = segment["z_position"] + road_segment_length / 2
 
-    # Add coins to the `coins` list
     for i in range(batch_size):
-        z = z_start + i * gap  # Position each coin with a gap
+        z = z_start + i * gap 
         coins.append({
-            "x": x_pos,  # X-position of the coin
-            "z": z,  # Z-position of the coin
-            "collected": False  # Mark the coin as not collected
-        })
+            "x": x_pos,
+            "z": z,
+            "collected": False})
 
 def draw_coins():
-    for coin in coins:  # Iterate through all coins
-        if not coin["collected"]:  # Only draw coins that have not been collected
+    for coin in coins:
+        if not coin["collected"]:
             glPushMatrix()
-            glTranslatef(coin["x"], 0.2, coin["z"])  # Position the coin slightly above the ground
-            glColor3f(1.0, 0.84, 0.0)  # Set the coin color to gold
-            glutSolidSphere(0.1, 16, 16)  # Draw the coin as a small sphere
+            glTranslatef(coin["x"], 0.2, coin["z"])
+            glColor3f(1.0, 0.84, 0.0)
+            glutSolidSphere(0.1, 16, 16)
             glPopMatrix()
+
 
 def coin_collision():
     global coinCount
-    for coin in coins:  # Iterate through all coins
-        if not coin["collected"]:  # Only check for uncollected coins
-            # Check if the player is close enough to collect the coin
+    for coin in coins:
+        if not coin["collected"]:
             if abs(player_x - coin["x"]) < 0.25 and abs(player_z - coin["z"]) < 0.25:
-                coin["collected"] = True  # Mark the coin as collected
-                coinCount += 1  # Increment the coin count
-                print(f"Coins collected: {coinCount}")  # Print the updated coin count
+                coin["collected"] = True
+                coinCount += 1
+                print(f"Coins collected: {coinCount}")
+
 
 def spawn_teapot():
     global teapot, teapot_respawn_timer
 
-    # Check if the respawn timer has elapsed
     if teapot is None and teapot_respawn_timer <= 0:
-        # Spawn the teapot randomly after a certain distance
         if distanceCovered > 50 and random.random() < 0.1:
             teapot = {
                 "x": random.uniform(-road_width / 2 + 0.5, road_width / 2 - 0.5),
-                "z": player_z + visible_range - 10,  # Spawn ahead of the player
-                "collected": False
-            }
+                "z": player_z + visible_range - 10,
+                "collected": False}
             print("Teapot spawned!")
+
     elif teapot is None:
-        # Decrease the respawn timer
-        teapot_respawn_timer -= 0.016  # Assuming ~60 FPS
+        teapot_respawn_timer -= 0.016  
 
 
 def draw_teapot():
@@ -683,67 +666,69 @@ def draw_teapot():
 
     if teapot and not teapot["collected"]:
         glPushMatrix()
-        glTranslatef(teapot["x"], 0.5, teapot["z"])  # Position the teapot
-        glRotatef(teapot_rotation, 0, 1, 0)  # Rotate around the Y-axis
-        glColor3f(1.0, 0.5, 0.0)  # Orange color for the teapot
-        glutSolidTeapot(0.3)  # Teapot size
+        glTranslatef(teapot["x"], 0.5, teapot["z"])  
+        glRotatef(teapot_rotation, 0, 1, 0)  
+        glColor3f(1.0, 0.5, 0.0)  
+        glutSolidTeapot(0.3)
         glPopMatrix()
 
-        # Update rotation
+        #rotation update
         teapot_rotation += 2.0
         if teapot_rotation >= 360.0:
             teapot_rotation -= 360.0   
+
+
 
 def teapot_collision():
     global teapot, teapot_invincibility, teapot_timer
 
     if teapot and not teapot["collected"]:
-        # Check if the player is close enough to collect the teapot
         if abs(player_x - teapot["x"]) < 0.25 and abs(player_z - teapot["z"]) < 0.25:
             teapot["collected"] = True
             teapot_invincibility = True
-            teapot_timer = 5.0  # 5 seconds of invincibility
+            teapot_timer = 5.0  
             print("Teapot collected! Invincibility activated for 3 seconds.")   
+
 
 def update_teapot():
     global teapot, teapot_invincibility, teapot_timer, teapot_respawn_timer
 
-    # Reduce the invincibility timer if active
     if teapot_invincibility:
-        teapot_timer -= 0.016  # Assuming ~60 FPS
+        teapot_timer -= 0.016  
         if teapot_timer <= 0:
             teapot_invincibility = False
             print("Invincibility expired.")
             teapot_timer = 0.0
 
-    # Remove the teapot if it has been collected
     if teapot and teapot["collected"]:
         teapot = None
-        teapot_respawn_timer = 5.0  # Set respawn timer to 5 seconds          
+        teapot_respawn_timer = 5.0 
+        
+                 
                 
 def draw_powerup_circle(x, y, radius, text, key):
-    # Draw the circle border
-    glColor3f(0.0, 0.0, 0.0)  # Black color for the border
+    #circel
+    glColor3f(0.0, 0.0, 0.0)  
     glBegin(GL_LINE_LOOP)
-    for i in range(30):  # 30 slices for a smooth circle
+    for i in range(30):  
         angle = 2 * math.pi * i / 30
         glVertex2f(x + radius * math.cos(angle), y + radius * math.sin(angle))
     glEnd()
 
-    # Draw the text inside the circle
-    glColor3f(1.0, 0.0, 0.0)  # Red color for the text
-    lines = text.split()  # Split the text into lines if needed
-    line_height = 12  # Adjust line spacing
+    # txt
+    glColor3f(1.0, 0.0, 0.0)  
+    lines = text.split()  
+    line_height = 12  
     for i, line in enumerate(lines):
-        text_width = len(line) * 7  # Approximate text width for smaller font
-        glRasterPos2f(x - text_width / 2, y + (len(lines) - i - 1) * line_height - 5)  # Center each line
+        text_width = len(line) * 7  
+        glRasterPos2f(x - text_width / 2, y + (len(lines) - i - 1) * line_height - 5)  
         for c in line:
-            glutBitmapCharacter(GLUT_BITMAP_HELVETICA_12, ord(c))  # Use a smaller font for better fit
+            glutBitmapCharacter(GLUT_BITMAP_HELVETICA_12, ord(c))  
 
-    # Draw the key label below the circle
-    glColor3f(1.0, 0.0, 0.0)  # Black color for the key label
-    glRasterPos2f(x - 5, y - radius - 15)  # Adjust key label position
-    for c in key:  # Ensure the key is displayed in uppercase
+    # jkl label
+    glColor3f(1.0, 0.0, 0.0)  
+    glRasterPos2f(x - 5, y - radius - 15)  
+    for c in key:  
         glutBitmapCharacter(GLUT_BITMAP_HELVETICA_18, ord(c))
 
 
@@ -751,21 +736,21 @@ def draw_powerup_keys():
     glMatrixMode(GL_PROJECTION)
     glPushMatrix()
     glLoadIdentity()
-    gluOrtho2D(0, width, 0, height)  # Set up orthographic projection
+    gluOrtho2D(0, width, 0, height)  
 
     glMatrixMode(GL_MODELVIEW)
     glPushMatrix()
     glLoadIdentity()
 
-    # Draw the power-up keys
-    draw_powerup_circle(width - 300, 100, 30, "+1 Bullet", "j")  # Key J
-    draw_powerup_circle(width - 200, 100, 30, "Halved Speed", "k")  # Key K
-    draw_powerup_circle(width - 100, 100, 30, "Bomb", "l")  # Key L
+   
+    draw_powerup_circle(width - 300, 100, 30, "+1 Bullet", "j")  
+    draw_powerup_circle(width - 200, 100, 30, "Halved Speed", "k")  
+    draw_powerup_circle(width - 100, 100, 30, "Bomb", "l")
 
     glPopMatrix()
     glMatrixMode(GL_PROJECTION)
     glPopMatrix()
-    glMatrixMode(GL_MODELVIEW)             
+    glMatrixMode(GL_MODELVIEW)               
 
 def display():
     global game_over,initial_zpos,distanceCovered,score,player_z,movementSpeed,vehicle_speed
@@ -785,14 +770,7 @@ def display():
     score=int(distanceCovered/10)
     # vehicle_speed+=speed_increment
     # vehicle_speed=min(vehicle_speed,1)
-    if game_over:
-        # Display "Game Over" message
-        glColor3f(1.0, 0.0, 0.0)  # Red color
-        glRasterPos2f(-0.2, 0.0)  # Position the text
-        for ch in "GAME OVER":
-            glutBitmapCharacter(GLUT_BITMAP_HELVETICA_18, ord(ch))
-        glutSwapBuffers()
-        return  # Stop further rendering
+
 
     if camera_mode == "third":
         cam_x = player_x
@@ -827,41 +805,40 @@ def display():
     draw_coins()
     
     coin_collision()
-    # draw_mouse_coords()
+    
     draw_distance()
     draw_score()
     # Teapot logic
     spawn_teapot()
     update_teapot()
-    teapot_collision()  # Check for teapot collision
+    teapot_collision()  
     draw_teapot()
     # Draw power-up keys
     # draw_powerup_circle()
     draw_powerup_keys()
     glutSwapBuffers()
 
+
+
 def keyboard(key, x, y):
-    global player_x, player_z, bullets, game_over, vehicles, distanceCovered, initial_zpos, move_speed, movementSpeed, speed_increment, segments, coinCount, camera_mode, cheat_mode
-    key = key.decode("utf-8").lower()  # Decode the key input and convert it to lowercase
+    global player_x, player_z, bullets, game_over, vehicles, distanceCovered, initial_zpos, move_speed, movementSpeed, speed_increment, segments,coinCount, camera_mode,cheat_mode
+    key = key.decode("utf-8").lower()
 
-    # Restart the game if 'r' is pressed and the game is over
     if game_over and key == 'r':
-        player_x = 0.0  # Reset player position
-        player_z = initial_zpos  # Reset player z-position
-        bullets = 5  # Reset bullet count
-        movementSpeed = 0.001  # Reset movement speed
-        speed_increment = 0.0001  # Reset speed increment
-        vehicles.clear()  # Clear all vehicles
-        distanceCovered = 0.0  # Reset distance covered
-        game_over = False  # Reset game over state
-        cheat_mode = False  # Disable cheat mode
-        coinCount = 0  # Reset coin count
-        coins.clear()  # Clear all coins
-        trees.clear()  # Clear all trees
-        debris.clear()  # Clear all debris
-        segments.clear()  # Clear all road segments
-
-        # Reinitialize road segments
+        player_x = 0.0
+        player_z = initial_zpos
+        bullets = 5
+        movementSpeed = 0.001
+        speed_increment = 0.0001
+        vehicles.clear()
+        distanceCovered = 0.0
+        game_over = False
+        cheat_mode=False
+        coinCount = 0
+        coins.clear()
+        trees.clear()
+        debris.clear()
+        segments.clear()
         for i in range(num_segments):
             segments.append({
                 "z_position": i * road_segment_length,
@@ -870,34 +847,30 @@ def keyboard(key, x, y):
                 "coin_present": False
             })
 
-        return  # Exit the function
-
-    # Handle key inputs if the game is not over
+        return
+    
     if not game_over:
-        if key == 'c':  # Toggle cheat mode
-            cheat_mode = not cheat_mode
-            print("CHEAT MODE:", cheat_mode)
+        if key=='c':
+            cheat_mode=not cheat_mode
+            print("CHEAT MODE:",cheat_mode)
+            print("CHEAT MODE:",cheat_mode)
 
-        if key == 'w':  # Toggle camera mode
+        if key == 'w':  
             camera_mode = "first" if camera_mode == "third" else "third"
-
-        elif key == 'a':  # Move player left
-            player_x += move_speed
-            if player_x > road_width / 2 - player_size / 2:  # Clamp player within road boundaries
+        elif key == 'a':
+            player_x += move_speed  
+            if player_x > road_width / 2 - player_size / 2:
                 player_x = road_width / 2 - player_size / 2
-
-        elif key == 'd':  # Move player right
-            player_x -= move_speed
-            if player_x < -road_width / 2 + player_size / 2:  # Clamp player within road boundaries
+        elif key == 'd':
+            player_x -= move_speed  
+            if player_x < -road_width / 2 + player_size / 2:
                 player_x = -road_width / 2 + player_size / 2
-
-        elif key == ' ' and bullets > 0:  # Fire a bullet if spacebar is pressed and bullets are available
+        elif key == ' ' and bullets > 0:
             fire_bullet()
-
-        # Powerup 1: Increase bullet count by 1 (key: J)
+        # Powerup 1: Increase bullet count by 1
         elif key == 'j':
-            if cheat_mode == False:
-                if coinCount >= 5 and bullets < 5:  # Check if enough coins are available and bullets are below max
+            if cheat_mode==False:
+                if coinCount >= 5 and bullets < 5:
                     bullets += 1
                     coinCount -= 5
                     print("Powerup Activated: +1 Bullet")
@@ -905,56 +878,63 @@ def keyboard(key, x, y):
                     print("Max bullets reached!")
                 else:
                     print("Not enough coins for Bullet Powerup!")
-            else:  # Cheat mode allows unlimited coins
+            else:
                 if coinCount >= 0 and bullets < 5:
                     bullets += 1
+                    
                     print("Powerup Activated: +1 Bullet")
                 elif bullets >= 5:
                     print("Max bullets reached!")
                 else:
                     print("Not enough coins for Bullet Powerup!")
 
-        # Powerup 2: Halve movement speed (key: K)
+
+        # Powerup 2: Halve movement speed
         elif key == 'k':
-            if coinCount >= 10:  # Check if enough coins are available
-                movementSpeed = max(movementSpeed / 2, 0.001)  # Halve the movement speed
+            
+            if coinCount >= 10:
+                movementSpeed = max(movementSpeed / 2, 0.001)
                 coinCount -= 10
                 print("Powerup Activated: Halved Speed")
             else:
                 print("Not enough coins for Slowdown Powerup!")
 
-        # Powerup 3: Bomb - Destroy vehicles in range (key: L)
+        # Powerup 3: Bomb - Destroy vehicles in range
         elif key == 'l':
-            if cheat_mode == False:
-                if coinCount >= 20:  # Check if enough coins are available
-                    bomb_radius = 15.0  # Define radius around the player
+            if cheat_mode==False:
+                if coinCount >= 20:
+                    bomb_radius = 15.0  
                     vehicles[:] = [v for v in vehicles if math.hypot(v["x_position"] - player_x, v["z_position"] - player_z) > bomb_radius]
                     coinCount -= 20
                     print("Powerup Activated: Bomb!")
                 else:
                     print("Not enough coins for Bomb Powerup!")
-            else:  # Cheat mode allows unlimited coins
+            else:
                 if coinCount >= 0:
-                    bomb_radius = 15.0  # Define radius around the player
+                    bomb_radius = 15.0  
                     vehicles[:] = [v for v in vehicles if math.hypot(v["x_position"] - player_x, v["z_position"] - player_z) > bomb_radius]
                     coinCount -= 0
                     print("Powerup Activated: Bomb!")
                 else:
                     print("Not enough coins for Bomb Powerup!")
+                
 
-    glutPostRedisplay()  # Request a redraw of the display
+
+    glutPostRedisplay()
+
+
 
 
 glutInit()
 glutInitDisplayMode(GLUT_RGBA | GLUT_DOUBLE | GLUT_DEPTH)
 glutInitWindowSize(width, height)
 glutInitWindowPosition(100, 100)
-glutCreateWindow(b"Run To Live 3D game")
+glutCreateWindow(b"Run To Survive 3D")
+
 init()
 glutDisplayFunc(display)
 glutKeyboardFunc(keyboard)
 glutIdleFunc(display)
-# glutPassiveMotionFunc(mouse_motion)
 glutMainLoop()
 
 
